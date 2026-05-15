@@ -1,15 +1,17 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { use } from "react";
 
 export const createProduct = async (req: Request, res: Response) => {
     try {
-        const { name, price, description, stock } = req.body;
+        const { name, price, description, stock, userId } = req.body;
         const newProduct = await prisma.product.create({
             data: {
                 name: name,
                 price: Number(price),
                 stock: Number(stock),
                 description: description,
+                userId: userId
             }
         });
 
@@ -28,10 +30,53 @@ export const createProduct = async (req: Request, res: Response) => {
 
 export const getAllproduct = async (req: Request, res: Response) => {
     try {
-        const products = await prisma.product.findMany();
+        const { search, minP, sortBy, owName } = req.query;
 
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 10;
+
+        const skip = (page - 1) * limit;
+
+        const products = await prisma.product.findMany({
+            where: {
+                name: {
+                    contains: search as string,
+                    mode: 'insensitive'
+                },
+                price: {
+                    gte: minP ? Number(minP) : 0
+                },
+                author: {
+                    name: {
+                        contains: owName as string,
+                        mode: 'insensitive'
+                    }
+                }
+            },
+            take: limit,
+            skip: skip,
+            orderBy: {
+                createdAt: sortBy === 'old' ? 'asc' : 'desc'
+            },
+            include: {
+                author: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                }
+            }
+        });
+        const totalData = await prisma.product.count();
         return res.status(200).json({
             massage: "production fetched!",
+            meta: {
+                current_paage: page,
+                limit: limit,
+                total_data: totalData,
+                total_page: Math.ceil(totalData / limit)
+            },
             data: products
         });
 
